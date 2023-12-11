@@ -24,7 +24,8 @@ class DatabaseSeeder extends Seeder
                 )
             )->create([
                 'name' => 'Jerome Paulos',
-                'email' => 'itsjeromepaulos@gmail.com'
+                'email' => 'itsjeromepaulos@gmail.com',
+                "can_use_ai" => true
             ]);
         }
     }

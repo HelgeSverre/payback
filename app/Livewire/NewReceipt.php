@@ -2,23 +2,24 @@
 
 namespace App\Livewire;
 
-use OpenAI;
-use Livewire\WithFileUploads;
-use Livewire\Component;
-use Livewire\Attributes\Validate;
-use Livewire\Attributes\Title;
-use Livewire\Attributes\Layout;
-use Illuminate\Support\Str;
-use Exception;
-use App\Models\Category;
 use App\Livewire\Forms\ReceiptForm;
+use App\Models\Category;
+use Exception;
+use HelgeSverre\Extractor\Engine;
+use HelgeSverre\Extractor\Facades\Extractor;
+use HelgeSverre\Extractor\Text\ImageContent;
+use Livewire\Attributes\Layout;
+use Livewire\Attributes\Title;
+use Livewire\Attributes\Validate;
+use Livewire\Component;
+use Livewire\WithFileUploads;
 
 class NewReceipt extends Component
 {
     use WithFileUploads;
 
     public ReceiptForm $form;
-    
+
     /** @var \Illuminate\Http\UploadedFile $image */
     #[Validate('image|max:3000')] // 3MB
     public $image;
@@ -33,81 +34,41 @@ class NewReceipt extends Component
         $this->autofillSuccess = null;
         $startTime = microtime(true);
 
-        // $url = sprintf(
-        //     'https://wsrv.nl/?url=%s&w=512&h=512',
-        //     urlencode($this->image->temporaryUrl())
-        // );
-        $url = 'https://i.imgur.com/m1CpYfR.jpg';
 
         $categories = Category::all()
             ->map(fn($category) => "`$category->slug`: $category->keywords")
             ->join("; ");
 
-        $client = OpenAI::client(config('openai.key'));
-        $response = $client->chat()->create([
-            'model' => 'gpt-4-vision-preview',
-            'max_tokens' => 1000,
-            // 'response_format' => ['type' => 'json_object'],
-            'messages' => [
-                [
-                    'role' => 'system',
-                    'content' => [
-                        [
-                            'type' => 'text',
-                            'text' => 'Return only JSON without any Markdown formatting or additional text.'
-                        ]
-                    ]
-                ],
-                [
-                    'role' => 'user',
-                    'content' => [
-                        [
-                            'type' => 'text',
-                            'text' => "
-                                Extract data from this receipt.
-                                Return only JSON, without any additional text or Markdown formatting.
-
-                                Return the data as a JSON object with the following keys:
-                                - `store`: The name of the business or store the receipt is from. Correct it if it isn't properly spelled or capialized.
-                                - `amount`: The grand total of the receipt without commas or currency symbols. If you are unsure, set this to an empty string; do not attempt to calculate it.
-                                - `description`: A general description of what was purchased.
-                                - `category`: Whichever category is most appropriate ($categories).
-
-                                If you are unsure about any values, set them to an empty string.
-                            "
-                        ],
-                        [
-                            'type' => 'image_url',
-                            'image_url' => [
-                                'url' => $url,
-                                'detail' => 'low'
-                            ]
-                        ]
-                    ]
-                ]
-            ]
-        ]);
 
         try {
-            $json = $response->choices[0]->message->content;
-            $json = Str::markdown($json);
-            $json = strip_tags($json);
-            $json = html_entity_decode($json);
-            $data = json_decode($json, true);
+            $data = Extractor::fields(
+                ImageContent::raw(file_get_contents($this->image->temporaryUrl())),
+                fields: [
+                    "store" => " The name of the business or store the receipt is from. Correct it if it isn't properly spelled or capitalized.",
+                    "amount" => " The grand total of the receipt without commas or currency symbols. If you are unsure, set this to an empty string; do not attempt to calculate it.",
+                    "description" => " A general description of what was purchased.",
+                    "category" => " Whichever category is most appropriate ($categories).",
+                    "items" => [
+                        "text" => "name of the item purchased",
+                        "price" => "price of the item",
+                        "qty" => "how many was purchased, defaults to 1 if not specified",
+                    ],
+                ],
+                model: Engine::GPT_4_VISION,
+                maxTokens: 1000,
+                temperature: 0.2,
+            );
 
             $this->form->store = $data['store'] ?? '';
             $this->form->amount = $data['amount'] ?? '';
             $this->form->description = $data['description'] ?? '';
-            $this->form->category_id = Category::where('slug', $data['category'])->first()->id;
+            $this->form->items = $data['items'] ?? '';
+            $this->form->category_id = Category::where('slug', $data['category'])?->first()?->id;
 
             $this->autofillSuccess = true;
-        } catch(Exception) {
+        } catch (Exception $exception) {
             $this->autofillSuccess = false;
         }
-        
-        // https://help.openai.com/en/articles/7127956-how-much-does-gpt-4-cost
-        $this->autofillCents = ($response->usage->promptTokens * 3/1000) + ($response->usage->completionTokens * 6/1000);
-        $this->autofillSeconds = microtime(true) - $startTime;
     }
 
     public function store()

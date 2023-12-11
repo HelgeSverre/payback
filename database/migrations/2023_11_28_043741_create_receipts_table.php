@@ -18,7 +18,7 @@ return new class extends Migration
 
             $table->string('store');
             $table->integer('amount');
-            $table->text('description')->default('');
+            $table->text('description')->nullable();
             $table->string('image')->nullable();
             $table->foreignIdFor(Category::class);
             $table->boolean('archived')->default(false);

@@ -17,6 +17,9 @@ class ReceiptForm extends Form
     #[Validate('required|numeric|min:0')]
     public $amount = '';
 
+    #[Validate('nullable|array')]
+    public $items = [[]];
+
     #[Validate('nullable')]
     public $description = '';
 

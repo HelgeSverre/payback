@@ -30,6 +30,15 @@
                 <x-input required wire:model="form.store" placeholder="Store"/>
                 <x-input required wire:model="form.amount" type="text" inputmode="tel" placeholder="Amount" prefix="$"/>
 
+                @foreach($form->items as $item)
+                    <div class="my-2 flex ">
+                        <x-input wire:model="form.items.{{$loop->index}}.text" placeholder="Item"/>
+                        <x-input wire:model="form.items.{{$loop->index}}.price" placeholder="price"/>
+                        <x-input wire:model="form.items.{{$loop->index}}.qty" placeholder="qty"/>
+
+                    </div>
+                @endforeach
+
                 <x-select required wire:model="form.category_id" placeholder="Category...">
                     @foreach($categories->where('qualified') as $category)
                         <option value="{{ $category->id }}">{{ $category->name }}</option>
